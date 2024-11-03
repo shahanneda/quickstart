@@ -1,19 +1,14 @@
 import time
 import traceback
 import numpy as np
-import sys
-import struct
-import fcntl
-import os
-import select
 import matplotlib.pyplot as plt
 from imu import FilteredLSM6DS3
 from odrive_uart import ODriveUART
 from lqr import LQR_gains
+import os
 
 # This is l-gpio
 from RPi import GPIO  # Import GPIO module
-
 
 # GPIO setup for resetting ODrive
 GPIO.setmode(GPIO.BCM)
@@ -24,7 +19,6 @@ def reset_odrive():
     time.sleep(0.1)
     GPIO.output(5, GPIO.HIGH)
     print("ODrive reset attempted")
-
 
 WHEEL_RADIUS = 6.5 * 0.0254 / 2  # 6.5 inches diameter converted to meters
 WHEEL_DIST = 0.235  # 23.5 cm from wheel to center
@@ -37,24 +31,18 @@ MAX_SPEED = 0.4  # m/s, set maximum linear speed
 def balance():
     imu = FilteredLSM6DS3()
     
-    K_balance = LQR_gains(
+    K = LQR_gains(
         #     [x, v, θ, ω, δ, δ']
         Q_diag=[100,100,1,10,10,1],
         #     [pitch, yaw]
         R_diag=[1, 1]
     )
-    K_drive = LQR_gains(
-        #     [x, v, θ, ω, δ, δ']
-        Q_diag=[1,100,0.1,10,1,10],
-        #     [pitch, yaw]
-        R_diag=[0.1, 1]
-    )
-    print(K_balance.round(2))
+    print(K.round(2))
     Dt = 1./400.
 
     prev_time = time.time()
     
-    zero_angle = -0.75
+    zero_angle = -2.0
     desired_yaw_rate = 0
     desired_vel = 0
 
@@ -105,32 +93,6 @@ def balance():
         except Exception as e:
             print(f"Error re-initializing motors: {e}")
 
-    # Initialize joystick
-    try:
-        jsdev = open('/dev/input/js0', 'rb')
-    except FileNotFoundError:
-        print("Joystick not found at /dev/input/js0")
-        sys.exit(1)
-
-    # Get the controller name
-    buf = bytearray(64)
-    JSIOCGNAME = 0x80006a13 + (len(buf) << 16)
-    fcntl.ioctl(jsdev, JSIOCGNAME, buf)
-    controller_name = buf.rstrip(b'\x00').decode('utf-8')
-    print(f"Joystick found: {controller_name}")
-
-    # Set the joystick device to non-blocking mode
-    fd = jsdev.fileno()
-    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-
-    # Initialize joystick variables
-    left_stick_x = 0.0
-    right_trigger = 0.0
-    left_trigger = 0.0
-    dpad_up = False
-    dpad_down = False
-
     # Record starting position
     try:
         l_pos = left_motor.get_position_turns()
@@ -149,10 +111,12 @@ def balance():
         except Exception as e:
             print(f"Error reading motor positions after reset: {e}")
             return
+
     imu.calibrate()
     start_time = time.time()
     cycle_count = 0
     prev_vel = 0  # Initialize previous velocity for moving average
+
     try:
         while True:
             loop_start_time = time.time()
@@ -173,82 +137,6 @@ def balance():
 
             cycle_count += 1
 
-            # Read joystick input
-            rlist, _, _ = select.select([jsdev], [], [], 0.0)
-            if jsdev in rlist:
-                evbuf = jsdev.read(8)
-                while evbuf:
-                    time_, value, type_, number = struct.unpack('IhBB', evbuf)
-                    if type_ & 0x02:  # JS_EVENT_AXIS
-                        if number == 0:  # Left stick X-axis
-                            left_stick_x = value / 32767.0  # Normalize to -1.0 to 1.0
-                        elif number == 4:  # Right trigger
-                            right_trigger = (value + 32768) / 65535.0  # Normalize to 0.0 to 1.0
-                        elif number == 5:  # Left trigger
-                            left_trigger = (value + 32768) / 65535.0  # Normalize to 0.0 to 1.0
-                        elif number == 7:  # D-pad up/down
-                            if value < 0:
-                                dpad_up = True
-                            elif value > 0:
-                                dpad_down = True
-                            else:
-                                dpad_up = dpad_down = False
-                    evbuf = jsdev.read(8)
-
-            # Map joystick inputs to desired velocities and yaw rates
-            LINEAR_SPEED = 0.3  # Adjusted to match MAX_SPEED
-            ANGULAR_SPEED = 2.0
-            ZERO_ANGLE_STEP = 0.025
-
-            # Handle zero angle adjustment
-            if dpad_up:
-                zero_angle += ZERO_ANGLE_STEP
-                print(f"Zero angle adjusted to: {zero_angle:.2f}")
-                dpad_up = False
-            elif dpad_down:
-                zero_angle -= ZERO_ANGLE_STEP
-                print(f"Zero angle adjusted to: {zero_angle:.2f}")
-                dpad_down = False
-
-            if right_trigger > 0.1:
-                if right_trigger > 0.8:
-                    if desired_vel != MAX_SPEED:
-                        print('FAST FORWARD')
-                    desired_vel = MAX_SPEED
-                else:
-                    if desired_vel != MAX_SPEED / 2:
-                        print('FORWARD')
-                    desired_vel = MAX_SPEED / 2
-            elif left_trigger > 0.1:
-                if left_trigger > 0.8:
-                    if desired_vel != -MAX_SPEED:
-                        print('FAST BACKWARD')
-                    desired_vel = -MAX_SPEED
-                else:
-                    if desired_vel != -MAX_SPEED / 2:
-                        print('BACKWARD')
-                    desired_vel = -MAX_SPEED / 2
-            else:
-                if desired_vel != 0.0:
-                    print('STOP')
-                    start_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS + np.sign(desired_vel)*0.2
-                desired_vel = 0.0
-
-            if abs(left_stick_x) > 0.2:
-                if left_stick_x < 0:
-                    if desired_yaw_rate != ANGULAR_SPEED:
-                        print("RIGHT")
-                    desired_yaw_rate = ANGULAR_SPEED
-                else:
-                    if desired_yaw_rate != -ANGULAR_SPEED:
-                        print("LEFT")
-                    desired_yaw_rate = -ANGULAR_SPEED
-            else:
-                if desired_yaw_rate != 0.0:
-                    print('STOP!')
-                    start_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST)
-                desired_yaw_rate = 0.0
-
             current_pitch = imu.robot_angle() 
             current_yaw_rate = imu.gyro_RAW[2]
             current_pitch_rate = imu.gyro_RAW[0]
@@ -259,7 +147,6 @@ def balance():
                 r_pos = right_motor.get_position_turns() 
                 current_vel = (l_vel + r_vel) / 2 * RPM_TO_METERS_PER_SECOND
                 current_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS - start_pos
-                # current_yaw_rate = (l_vel - r_vel) * RPM_TO_METERS_PER_SECOND / (2*WHEEL_DIST)
                 current_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST) - start_yaw
                              
             except Exception as e:
@@ -267,10 +154,7 @@ def balance():
                 reset_and_initialize_motors()
                 continue
 
-            # Get current velocity
-
             current_time = time.time()
-
 
             # Store data for plotting
             times.append(current_time - start_plot_time)
@@ -291,20 +175,10 @@ def balance():
                 current_pos, current_vel, current_pitch*np.pi/180, current_pitch_rate, current_yaw, current_yaw_rate
             ])
             
-            desired_vel = max(min(desired_vel, MAX_SPEED), -MAX_SPEED)
-            desired_state = np.array([
-                0, desired_vel, zero_angle*np.pi/180, 0, 0, desired_yaw_rate
-            ])
+            desired_state = np.array([0, 0, zero_angle*np.pi/180, 0, 0, 0])
 
             state_error = (current_state - desired_state).reshape((6,1))
-            if desired_vel != 0.0:
-                state_error[0,0] = 0
-                C = -K_drive @ state_error
-            if desired_yaw_rate != 0:
-                state_error[4,0] = 0  # 0 yaw error
-                C = -K_drive @ state_error
-            if desired_vel == 0 and desired_yaw_rate == 0:
-                C = -K_balance @ state_error
+            C = -K @ state_error
             D = np.array([[0.5,0.5],[0.5,-0.5]])
             left_torque, right_torque = (D @ C).squeeze()
 
@@ -325,7 +199,6 @@ def balance():
             loop_end_time = time.time()
             loop_duration = loop_end_time - loop_start_time
             if cycle_count % 50 == 0:
-                # print(imu.robot_angle(), imu.robot_angle_RAW())
                 print(f"Loop time: {loop_duration:.6f} sec, x=[{current_pos:.2f} | 0], v=[{current_vel:.2f} | {desired_vel:.2f}], θ=[{current_pitch:.2f} | {zero_angle:.2f}], ω=[{current_pitch_rate:.2f} | 0], δ=[{current_yaw:.2f} | 0], δ'=[{current_yaw_rate:.2f} | {desired_yaw_rate:.2f}]")
 
             time.sleep(max(0, Dt - (time.time() - current_time)))
@@ -341,7 +214,6 @@ def balance():
         # Stop the motors after the loop
         left_motor.stop()
         right_motor.stop()
-        jsdev.close()
 
         # Create the plots
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(15, 12))
