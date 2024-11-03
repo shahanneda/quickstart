@@ -151,10 +151,8 @@ def balance():
             current_yaw_rate = -imu.gyro_RAW[2]
             current_pitch_rate = imu.gyro_RAW[0]
             try:
-                l_vel = left_motor.get_speed_rpm()
-                l_pos = left_motor.get_position_turns()
-                r_vel = right_motor.get_speed_rpm()
-                r_pos = right_motor.get_position_turns() 
+                l_pos, l_vel = left_motor.get_pos_vel() 
+                r_pos, r_vel = right_motor.get_pos_vel() 
                 current_vel = (l_vel + r_vel) / 2 * RPM_TO_METERS_PER_SECOND
                 current_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS - start_pos
                 current_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST) - start_yaw
