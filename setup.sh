@@ -64,6 +64,10 @@ sudo usermod -a -G dialout $USER
 echo "Configuring boot settings..."
 sudo sh -c 'printf "\nenable_uart=1\ndtoverlay=uart1-pi5\n" >> /boot/firmware/config.txt'
 
+# Install git
+echo "Installing git..."
+sudo apt install -y git
+
 # Clone the BracketBot quickstart repository
 echo "Cloning the BracketBot quickstart repository..."
 cd ~
