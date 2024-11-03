@@ -103,7 +103,7 @@ class ODriveUART:
         self.send_command(f'w axis{self.axis_num}.requested_state {self.AXIS_STATE_CLOSED_LOOP_CONTROL}')
 
 if __name__ == '__main__':
-    motor1 = ODriveUART('/dev/ttyAMA0', axis_num=0, dir=-1)
+    motor1 = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
     motor2 = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=1)
     motor1.start()
     motor2.start()
