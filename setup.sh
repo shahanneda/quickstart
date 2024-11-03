@@ -15,7 +15,7 @@ sudo systemctl start ssh
 
 # Check SSH service status
 echo "Checking SSH service status..."
-sudo systemctl status ssh
+sudo SYSTEMD_PAGER='' systemctl status ssh
 
 # Install Python development packages
 echo "Installing Python development packages..."
