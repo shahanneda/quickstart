@@ -6,6 +6,7 @@ from imu import FilteredLSM6DS3
 from odrive_uart import ODriveUART
 from lqr import LQR_gains
 import os
+import json
 
 # This is l-gpio
 from RPi import GPIO  # Import GPIO module
@@ -66,8 +67,17 @@ def balance():
     time.sleep(1)   # Wait for ODrive to reset
 
     # Initialize motors
-    right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
-    left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=-1)
+    # Read motor directions from saved file
+    try:
+        with open('motor_dir.json', 'r') as f:
+            motor_dirs = json.load(f)
+            left_dir = motor_dirs['left']
+            right_dir = motor_dirs['right']
+    except Exception as e:
+        raise Exception("Error reading motor_dir.json")
+    
+    right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=left_dir)
+    left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=right_dir)
     left_motor.enable_torque_mode()
     right_motor.enable_torque_mode()
     left_motor.start()
@@ -81,8 +91,8 @@ def balance():
         reset_odrive()
         time.sleep(1)  # Give ODrive time to reset
         try:
-            right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
-            left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=-1)
+            right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=left_dir)
+            left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=right_dir)
             right_motor.clear_errors()
             left_motor.clear_errors()
             left_motor.enable_torque_mode()
@@ -138,7 +148,7 @@ def balance():
             cycle_count += 1
 
             current_pitch = imu.robot_angle() 
-            current_yaw_rate = imu.gyro_RAW[2]
+            current_yaw_rate = -imu.gyro_RAW[2]
             current_pitch_rate = imu.gyro_RAW[0]
             try:
                 l_vel = left_motor.get_speed_rpm()
