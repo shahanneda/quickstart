@@ -67,11 +67,13 @@ class ODriveUART:
     def set_speed_rpm(self, rpm):
         rps = rpm / 60
         self.send_command(f'w axis{self.axis_num}.controller.input_vel {rps * self.dir:.4f}')
+        self.send_command(f'u {self.axis_num}')
 
     def set_torque_nm(self, nm):
         torque_bias = 0.05  # Small torque bias in Nm
         adjusted_torque = nm * self.dir + (torque_bias * self.dir * (1 if nm >= 0 else -1))
         self.send_command(f'w axis{self.axis_num}.controller.input_torque {adjusted_torque:.4f}')
+        self.send_command(f'u {self.axis_num}')
 
     def get_speed_rpm(self):
         response = self.send_command(f'r axis{self.axis_num}.encoder.vel_estimate')
@@ -101,7 +103,7 @@ class ODriveUART:
         self.send_command(f'w axis{self.axis_num}.requested_state {self.AXIS_STATE_CLOSED_LOOP_CONTROL}')
 
 if __name__ == '__main__':
-    motor1 = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
+    motor1 = ODriveUART('/dev/ttyAMA0', axis_num=0, dir=-1)
     motor2 = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=1)
     motor1.start()
     motor2.start()
