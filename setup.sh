@@ -74,16 +74,16 @@ sudo sh -c 'printf "\nenable_uart=1\ndtoverlay=uart1-pi5\n" >> /boot/firmware/co
 # git clone https://github.com/BracketBotCapstone/quickstart
 # cd quickstart
 
-# Inform the user about the calibration step
-echo "Please ensure the ODrive is connected via USB before proceeding."
-read -p "Press Enter to run the calibration script..."
-
 # Install required Python packages
 echo "Installing required Python packages..."
 pip install numpy sympy control matplotlib pyserial
 
+# Inform the user about the calibration step
+echo -e "\e[1;33mPlease ensure the ODrive is connected via USB before proceeding.\e[0m"
+read -p "Press Enter once the ODrive is connected..."
+
 # Run the calibration script
 echo "Running the ODrive calibration script..."
-python calibrate_odrive.py
+python3 ~/quickstart/calibrate_odrive.py
 
 echo "Setup complete! You may need to reboot your system for all changes to take effect."
