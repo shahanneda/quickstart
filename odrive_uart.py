@@ -29,7 +29,7 @@ class ODriveUART:
         self.bus.reset_input_buffer()
         self.bus.write(f"{command}\n".encode())
         # Wait for the response if it's a read command
-        if command.startswith('r'):
+        if command.startswith('r') or command.startswith('f'):
             # Read until a newline character is encountered
             response = self.bus.readline().decode('ascii').strip()
             # If the response is empty, print a debug message
@@ -72,7 +72,8 @@ class ODriveUART:
     def set_torque_nm(self, nm):
         torque_bias = 0.05  # Small torque bias in Nm
         adjusted_torque = nm * self.dir + (torque_bias * self.dir * (1 if nm >= 0 else -1))
-        self.send_command(f'w axis{self.axis_num}.controller.input_torque {adjusted_torque:.4f}')
+        # self.send_command(f'w axis{self.axis_num}.controller.input_torque {adjusted_torque:.4f}')
+        self.send_command(f'c {self.axis_num} {adjusted_torque:.4f}')
         self.send_command(f'u {self.axis_num}')
 
     def get_speed_rpm(self):
@@ -82,6 +83,10 @@ class ODriveUART:
     def get_position_turns(self):
         response = self.send_command(f'r axis{self.axis_num}.encoder.pos_estimate')
         return float(response) * self.dir
+
+    def get_pos_vel(self):
+        pos, vel = self.send_command(f'f {self.axis_num}').split(' ')
+        return float(pos) * self.dir, float(vel) * self.dir * 60
 
     def stop(self):
         self.send_command(f'w axis{self.axis_num}.controller.input_vel 0')
