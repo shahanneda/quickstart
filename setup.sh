@@ -56,9 +56,9 @@ echo "Running ODrive udev setup..."
 ODRIVE_TOOL_PATH=$(which odrivetool)
 sudo "$ODRIVE_TOOL_PATH" udev-setup
 
-# Add current user to dialout group
-echo "Adding current user to 'dialout' group..."
-sudo usermod -a -G dialout $USER
+# Add current user to dialout and audio groups
+echo "Adding current user to 'dialout' and 'audio' groups..."
+sudo usermod -a -G dialout,audio $USER
 
 # Configure boot settings
 echo "Configuring boot settings..."
