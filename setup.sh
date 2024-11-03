@@ -65,14 +65,14 @@ echo "Configuring boot settings..."
 sudo sh -c 'printf "\nenable_uart=1\ndtoverlay=uart1-pi5\n" >> /boot/firmware/config.txt'
 
 # Install git
-echo "Installing git..."
-sudo apt install -y git
+# echo "Installing git..."
+# sudo apt install -y git
 
-# Clone the BracketBot quickstart repository
-echo "Cloning the BracketBot quickstart repository..."
-cd ~
-git clone https://github.com/BracketBotCapstone/quickstart
-cd quickstart
+# # Clone the BracketBot quickstart repository
+# echo "Cloning the BracketBot quickstart repository..."
+# cd ~
+# git clone https://github.com/BracketBotCapstone/quickstart
+# cd quickstart
 
 # Inform the user about the calibration step
 echo "Please ensure the ODrive is connected via USB before proceeding."
