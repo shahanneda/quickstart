@@ -128,6 +128,8 @@ def balance():
     prev_vel = 0  # Initialize previous velocity for moving average
 
     try:
+        left_motor.enable_watchdog()
+        right_motor.enable_watchdog()
         while True:
             loop_start_time = time.time()
 
@@ -220,6 +222,8 @@ def balance():
 
     finally:
         # Stop the motors after the loop
+        left_motor.disable_watchdog()
+        right_motor.disable_watchdog()
         left_motor.stop()
         right_motor.stop()
 
