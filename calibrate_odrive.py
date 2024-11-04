@@ -34,7 +34,7 @@ def calibrate_axis(odrv0, axis):
     # -------- ODrive Configuration --------
     print("Configuring ODrive...")
     getattr(odrv0, f'axis{axis}').config.watchdog_timeout=0.5
-    getattr(odrv0, f'axis{axis}').config.enable_watchdog=True
+    getattr(odrv0, f'axis{axis}').config.enable_watchdog=False
     getattr(odrv0, f'axis{axis}').motor.config.calibration_current = 5
     getattr(odrv0, f'axis{axis}').motor.config.pole_pairs = 15
     getattr(odrv0, f'axis{axis}').motor.config.resistance_calib_max_voltage = 4
