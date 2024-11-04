@@ -107,6 +107,12 @@ class ODriveUART:
         self.send_command(f'w axis{self.axis_num}.error 0')
         self.send_command(f'w axis{self.axis_num}.requested_state {self.AXIS_STATE_CLOSED_LOOP_CONTROL}')
 
+    def enable_watchdog(self):
+        self.send_command(f'w axis{self.axis_num}.config.enable_watchdog 1')
+
+    def disable_watchdog(self):
+        self.send_command(f'w axis{self.axis_num}.config.enable_watchdog 0')
+
 if __name__ == '__main__':
     motor1 = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
     motor2 = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=1)
