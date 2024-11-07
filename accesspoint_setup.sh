@@ -1,85 +1,166 @@
 #!/bin/bash
 
+# Script Name: setup_persistent_hotspot.sh
+# Description: Automates the setup of a persistent Wi-Fi hotspot on Raspberry Pi using NetworkManager.
+# Usage: sudo bash setup_persistent_hotspot.sh
+
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-# Get the current logged-in username
-USERNAME=$(whoami)
+# ============================
+# Configuration Variables
+# ============================
 
-# Define the SSID and password
-SSID="${USERNAME}-bracketbot"
-PASSWORD="12345678"
+# Define the SSID and password for the hotspot
+SSID="kaya-bracketbot"
+PASSWORD="12345678"  # Replace with a strong password
 
-echo "Setting up Wi-Fi access point with SSID: $SSID"
+# Define the hotspot connection name
+CONNECTION_NAME="MyHotspot"
 
-# Update system packages
-sudo apt update
+# Define the virtual interface name
+VIRTUAL_IFACE="wlan0_ap"
 
-# Install necessary packages
-sudo apt install -y avahi-daemon avahi-utils net-tools
+# Define the path for the setup script
+SETUP_SCRIPT="/usr/local/bin/setup_hotspot.sh"
 
-# Enable and start avahi-daemon
-sudo systemctl enable avahi-daemon
-sudo systemctl start avahi-daemon
+# Define the path for the systemd service
+SYSTEMD_SERVICE="/etc/systemd/system/hotspot.service"
 
-# Configure avahi-daemon
-AVAHI_CONF="/etc/avahi/avahi-daemon.conf"
+# ============================
+# Step 1: Create the Hotspot Setup Script
+# ============================
 
-# Replace or add use-ipv4 and use-ipv6 in [server] section
-sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^use-ipv4=.*/use-ipv4=yes/' "$AVAHI_CONF"
-sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^use-ipv6=.*/use-ipv6=no/' "$AVAHI_CONF"
+echo "Creating the hotspot setup script at $SETUP_SCRIPT..."
 
-# Add or update allow-interfaces in [server] section
-if grep -q '^\[server\]' "$AVAHI_CONF"; then
-    # Check if allow-interfaces is already set
-    if grep -A5 '^\[server\]' "$AVAHI_CONF" | grep -q '^allow-interfaces='; then
-        # Update existing allow-interfaces line
-        sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^allow-interfaces=.*/allow-interfaces=eth0,wlan0,wlan0_ap/' "$AVAHI_CONF"
+sudo tee "$SETUP_SCRIPT" > /dev/null <<EOF
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Configuration Variables
+SSID="$SSID"
+PASSWORD="$PASSWORD"
+CONNECTION_NAME="$CONNECTION_NAME"
+VIRTUAL_IFACE="$VIRTUAL_IFACE"
+
+# Function to create virtual interface
+create_virtual_interface() {
+    if ! iw dev | grep -q "\$VIRTUAL_IFACE"; then
+        echo "Creating virtual interface \$VIRTUAL_IFACE..."
+        sudo iw dev wlan0 interface add \$VIRTUAL_IFACE type __ap
     else
-        # Add allow-interfaces line after [server] section
-        sudo sed -i '/^\[server\]/a allow-interfaces=eth0,wlan0,wlan0_ap' "$AVAHI_CONF"
+        echo "Virtual interface \$VIRTUAL_IFACE already exists."
     fi
-else
-    # [server] section not found, add it to the top of the file
-    echo -e "[server]\nallow-interfaces=eth0,wlan0,wlan0_ap" | sudo tee -a "$AVAHI_CONF"
-fi
+}
 
-# Restart avahi-daemon
-sudo systemctl restart avahi-daemon
+# Function to bring up the virtual interface
+bring_up_interface() {
+    echo "Bringing up interface \$VIRTUAL_IFACE..."
+    sudo ip link set \$VIRTUAL_IFACE up
+}
 
-# Configure NetworkManager
-NM_CONF="/etc/NetworkManager/NetworkManager.conf"
+# Function to configure NetworkManager hotspot
+configure_hotspot() {
+    echo "Configuring NetworkManager hotspot..."
 
-# Append connection settings to NetworkManager config
-echo -e "\n[connection]\nipv4.mdns=2\nipv6.mdns=2" | sudo tee -a "$NM_CONF"
+    # Delete existing hotspot connection if it exists
+    if nmcli connection show | grep -q "\$CONNECTION_NAME"; then
+        echo "Deleting existing connection '\$CONNECTION_NAME'..."
+        sudo nmcli connection delete "\$CONNECTION_NAME"
+        sleep 1
+    fi
 
-# Restart NetworkManager
-sudo systemctl restart NetworkManager
+    # Create a new hotspot connection
+    echo "Creating new hotspot connection '\$CONNECTION_NAME'..."
+    sudo nmcli connection add type wifi ifname \$VIRTUAL_IFACE con-name "\$CONNECTION_NAME" autoconnect yes ssid "\$SSID"
+    sleep 1
 
-# Create virtual AP interface
-sudo iw dev wlan0 interface add wlan0_ap type __ap
+    # Modify hotspot settings
+    sudo nmcli connection modify "\$CONNECTION_NAME" 802-11-wireless.mode ap
+    sudo nmcli connection modify "\$CONNECTION_NAME" 802-11-wireless.band bg
+    sudo nmcli connection modify "\$CONNECTION_NAME" ipv4.method shared
+    sudo nmcli connection modify "\$CONNECTION_NAME" wifi-sec.key-mgmt wpa-psk
+    sudo nmcli connection modify "\$CONNECTION_NAME" wifi-sec.psk "\$PASSWORD"
+    sleep 1
 
-# Create a Wi-Fi hotspot connection
-sudo nmcli connection add type wifi ifname wlan0_ap con-name MyHotspot autoconnect yes ssid "$SSID"
+    # Bring up the hotspot connection
+    echo "Activating hotspot connection '\$CONNECTION_NAME'..."
+    sudo nmcli connection up "\$CONNECTION_NAME"
+    sleep 1
+}
 
-# Configure the hotspot settings
-sudo nmcli connection modify MyHotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared
+# Function to ensure SSH is enabled and running
+configure_ssh() {
+    echo "Ensuring SSH service is enabled and running..."
+    if ! systemctl is-active ssh >/dev/null 2>&1; then
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+    else
+        sudo systemctl restart ssh
+    fi
+}
 
-# Set the Wi-Fi security (WPA-PSK)
-sudo nmcli connection modify MyHotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASSWORD"
-
-# Bring up both interfaces
-sudo nmcli connection up MyHotspot
-# sudo nmcli device connect wlan0
-
-# Ensure SSH service is enabled and running
-if ! systemctl is-active ssh >/dev/null 2>&1; then
-    sudo systemctl enable ssh
-    sudo systemctl start ssh
-else
-    sudo systemctl restart ssh
-fi
+# Execute the functions
+create_virtual_interface
+bring_up_interface
+configure_hotspot
+configure_ssh
 
 echo "Setup complete."
-echo "The access point '$SSID' is now active with password '$PASSWORD'."
+echo "The access point '\$SSID' is now active with password '\$PASSWORD'."
 echo "You can SSH into the Raspberry Pi using its hostname over the access point network."
+EOF
+
+# Make the setup script executable
+sudo chmod +x "$SETUP_SCRIPT"
+
+# ============================
+# Step 2: Create the systemd Service
+# ============================
+
+echo "Creating the systemd service at $SYSTEMD_SERVICE..."
+
+sudo tee "$SYSTEMD_SERVICE" > /dev/null <<EOF
+[Unit]
+Description=Persistent Wi-Fi Hotspot Setup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=$SETUP_SCRIPT
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# ============================
+# Step 3: Reload systemd and Enable the Service
+# ============================
+
+echo "Reloading systemd daemon and enabling the hotspot service..."
+
+sudo systemctl daemon-reload
+sudo systemctl enable hotspot.service
+sudo systemctl start hotspot.service
+
+# ============================
+# Step 4: Verify the Service Status
+# ============================
+
+echo "Verifying the hotspot service status..."
+
+sudo systemctl status hotspot.service --no-pager
+
+# ============================
+# Step 5: Final Instructions
+# ============================
+
+echo ""
+echo "Hotspot setup script and systemd service have been created and started successfully."
+echo "The hotspot will now persist across reboots."
+echo "To verify, you can reboot your Raspberry Pi and check the hotspot status using:"
+echo "  sudo nmcli connection show --active"
+echo "You should see '$CONNECTION_NAME' listed as active."
