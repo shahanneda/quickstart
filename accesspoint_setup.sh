@@ -2,7 +2,7 @@
 
 # Script Name: setup_persistent_hotspot.sh
 # Description: Automates the setup of a persistent Wi-Fi hotspot on Raspberry Pi using NetworkManager.
-# Usage: sudo bash setup_persistent_hotspot.sh
+# Usage: sudo bash accesspoint_setup.sh
 
 # Exit immediately if a command exits with a non-zero status
 set -e
