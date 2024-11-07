@@ -12,7 +12,7 @@ set -e
 # ============================
 
 # Define the SSID and password for the hotspot
-SSID="kaya-bracketbot"
+SSID="$USER-bracketbot"
 PASSWORD="12345678"  # Replace with a strong password
 
 # Define the hotspot connection name
