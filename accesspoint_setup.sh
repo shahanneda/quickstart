@@ -23,33 +23,41 @@ sudo systemctl enable avahi-daemon
 sudo systemctl start avahi-daemon
 
 # Configure avahi-daemon
-sudo sed -i 's/^use-ipv4=.*/use-ipv4=yes/' /etc/avahi/avahi-daemon.conf
-sudo sed -i 's/^use-ipv6=.*/use-ipv6=no/' /etc/avahi/avahi-daemon.conf
+AVAHI_CONF="/etc/avahi/avahi-daemon.conf"
 
-# Add allowed interfaces to avahi-daemon.conf
-if grep -q '^allow-interfaces=' /etc/avahi/avahi-daemon.conf; then
-    sudo sed -i 's/^allow-interfaces=.*/allow-interfaces=eth0,wlan0,wlan0_ap/' /etc/avahi/avahi-daemon.conf
+# Replace or add use-ipv4 and use-ipv6 in [server] section
+sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^use-ipv4=.*/use-ipv4=yes/' "$AVAHI_CONF"
+sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^use-ipv6=.*/use-ipv6=no/' "$AVAHI_CONF"
+
+# Add or update allow-interfaces in [server] section
+if grep -q '^\[server\]' "$AVAHI_CONF"; then
+    # Check if allow-interfaces is already set
+    if grep -A5 '^\[server\]' "$AVAHI_CONF" | grep -q '^allow-interfaces='; then
+        # Update existing allow-interfaces line
+        sudo sed -i '/^\[server\]/,/^\[.*\]/ s/^allow-interfaces=.*/allow-interfaces=eth0,wlan0,wlan0_ap/' "$AVAHI_CONF"
+    else
+        # Add allow-interfaces line after [server] section
+        sudo sed -i '/^\[server\]/a allow-interfaces=eth0,wlan0,wlan0_ap' "$AVAHI_CONF"
+    fi
 else
-    echo "allow-interfaces=eth0,wlan0,wlan0_ap" | sudo tee -a /etc/avahi/avahi-daemon.conf
+    # [server] section not found, add it to the top of the file
+    echo -e "[server]\nallow-interfaces=eth0,wlan0,wlan0_ap" | sudo tee -a "$AVAHI_CONF"
 fi
 
 # Restart avahi-daemon
 sudo systemctl restart avahi-daemon
 
 # Configure NetworkManager
-if ! grep -q '^\[connection\]' /etc/NetworkManager/NetworkManager.conf; then
-    echo -e "\n[connection]" | sudo tee -a /etc/NetworkManager/NetworkManager.conf
-fi
-sudo sed -i '/^\[connection\]/,/^\[/{s/^ipv4\.mdns=.*/ipv4.mdns=2/;t;s/^ipv6\.mdns=.*/ipv6.mdns=2/;t}' /etc/NetworkManager/NetworkManager.conf
-if ! grep -q '^ipv4\.mdns=2' /etc/NetworkManager/NetworkManager.conf; then
-    sudo sed -i '/^\[connection\]/a ipv4.mdns=2' /etc/NetworkManager/NetworkManager.conf
-fi
-if ! grep -q '^ipv6\.mdns=2' /etc/NetworkManager/NetworkManager.conf; then
-    sudo sed -i '/^\[connection\]/a ipv6.mdns=2' /etc/NetworkManager/NetworkManager.conf
-fi
+NM_CONF="/etc/NetworkManager/NetworkManager.conf"
+
+# Append connection settings to NetworkManager config
+echo -e "\n[connection]\nipv4.mdns=2\nipv6.mdns=2" | sudo tee -a "$NM_CONF"
 
 # Restart NetworkManager
 sudo systemctl restart NetworkManager
+
+# Create virtual AP interface
+sudo iw dev wlan0 interface add wlan0_ap type __ap
 
 # Create a Wi-Fi hotspot connection
 sudo nmcli connection add type wifi ifname wlan0_ap con-name MyHotspot autoconnect yes ssid "$SSID"
@@ -60,12 +68,17 @@ sudo nmcli connection modify MyHotspot 802-11-wireless.mode ap 802-11-wireless.b
 # Set the Wi-Fi security (WPA-PSK)
 sudo nmcli connection modify MyHotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASSWORD"
 
-# Bring up the hotspot
+# Bring up both interfaces
 sudo nmcli connection up MyHotspot
+# sudo nmcli device connect wlan0
 
 # Ensure SSH service is enabled and running
-sudo systemctl enable ssh
-sudo systemctl start ssh
+if ! systemctl is-active ssh >/dev/null 2>&1; then
+    sudo systemctl enable ssh
+    sudo systemctl start ssh
+else
+    sudo systemctl restart ssh
+fi
 
 echo "Setup complete."
 echo "The access point '$SSID' is now active with password '$PASSWORD'."
