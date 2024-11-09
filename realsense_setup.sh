@@ -38,12 +38,17 @@ source ~/.venv/bin/activate
 pip install numpy
 pip install opencv-python
 
-# Copy the built Python bindings to the virtual environment's site-packages
+# Get the site-packages path
 SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
-cp -T ~/librealsense/build/Release/pyrealsense2.cpython-312-aarch64-linux-gnu.so "$SITE_PACKAGES/pyrealsense2.so"
-cp -T ~/librealsense/build/Release/pyrealsense2.cpython-312-aarch64-linux-gnu.so.2.55 "$SITE_PACKAGES/pyrealsense2.so.2.55"
-cp -T ~/librealsense/build/Release/pyrsutils.cpython-312-aarch64-linux-gnu.so "$SITE_PACKAGES/pyrsutils.so"
-cp -T ~/librealsense/build/Release/pyrsutils.cpython-312-aarch64-linux-gnu.so.2.55 "$SITE_PACKAGES/pyrsutils.so.2.55"
+
+# Copy all .so files found in the build directory to the site-packages directory
+find ~/librealsense/build/Release -name "*.so*" -exec bash -c '
+  for file; do
+    base_name=$(basename "$file" | sed "s/.cpython-[0-9]*-[a-z0-9_]*.so.*/.so/")
+    cp -T "$file" "$SITE_PACKAGES/$base_name"
+  done
+' bash {} +
+
 
 echo "RealSense Python bindings have been installed in the virtual environment."
 echo -e "\nYou can test the installation with the following steps:"
