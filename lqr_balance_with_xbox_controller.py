@@ -55,7 +55,7 @@ def balance():
 
     prev_time = time.time()
     
-    zero_angle = -0.75
+    zero_angle = -1.5
     desired_yaw_rate = 0
     desired_vel = 0
 
@@ -79,6 +79,7 @@ def balance():
     time.sleep(1)   # Wait for ODrive to reset
 
     # Initialize motors
+    # Read motor directions from saved file
     try:
         with open('motor_dir.json', 'r') as f:
             motor_dirs = json.load(f)
@@ -162,7 +163,10 @@ def balance():
     start_time = time.time()
     cycle_count = 0
     prev_vel = 0  # Initialize previous velocity for moving average
+
     try:
+        left_motor.enable_watchdog()
+        right_motor.enable_watchdog()
         while True:
             loop_start_time = time.time()
 
@@ -190,7 +194,7 @@ def balance():
                     time_, value, type_, number = struct.unpack('IhBB', evbuf)
                     if type_ & 0x02:  # JS_EVENT_AXIS
                         if number == 0:  # Left stick X-axis
-                            left_stick_x = value / 32767.0  # Normalize to -1.0 to 1.0
+                            left_stick_x = - value / 32767.0  # Normalize to -1.0 to 1.0
                         elif number == 4:  # Right trigger
                             right_trigger = (value + 32768) / 65535.0  # Normalize to 0.0 to 1.0
                         elif number == 5:  # Left trigger
@@ -262,13 +266,10 @@ def balance():
             current_yaw_rate = -imu.gyro_RAW[2]
             current_pitch_rate = imu.gyro_RAW[0]
             try:
-                l_vel = left_motor.get_speed_rpm()
-                l_pos = left_motor.get_position_turns()
-                r_vel = right_motor.get_speed_rpm()
-                r_pos = right_motor.get_position_turns() 
+                l_pos, l_vel = left_motor.get_pos_vel() 
+                r_pos, r_vel = right_motor.get_pos_vel() 
                 current_vel = (l_vel + r_vel) / 2 * RPM_TO_METERS_PER_SECOND
                 current_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS - start_pos
-                # current_yaw_rate = (l_vel - r_vel) * RPM_TO_METERS_PER_SECOND / (2*WHEEL_DIST)
                 current_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST) - start_yaw
                              
             except Exception as e:
@@ -276,10 +277,7 @@ def balance():
                 reset_and_initialize_motors()
                 continue
 
-            # Get current velocity
-
             current_time = time.time()
-
 
             # Store data for plotting
             times.append(current_time - start_plot_time)
@@ -334,7 +332,6 @@ def balance():
             loop_end_time = time.time()
             loop_duration = loop_end_time - loop_start_time
             if cycle_count % 50 == 0:
-                # print(imu.robot_angle(), imu.robot_angle_RAW())
                 print(f"Loop time: {loop_duration:.6f} sec, x=[{current_pos:.2f} | 0], v=[{current_vel:.2f} | {desired_vel:.2f}], θ=[{current_pitch:.2f} | {zero_angle:.2f}], ω=[{current_pitch_rate:.2f} | 0], δ=[{current_yaw:.2f} | 0], δ'=[{current_yaw_rate:.2f} | {desired_yaw_rate:.2f}]")
 
             time.sleep(max(0, Dt - (time.time() - current_time)))
@@ -348,6 +345,8 @@ def balance():
 
     finally:
         # Stop the motors after the loop
+        left_motor.disable_watchdog()
+        right_motor.disable_watchdog()
         left_motor.stop()
         right_motor.stop()
         jsdev.close()
