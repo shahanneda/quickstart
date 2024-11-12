@@ -7,31 +7,31 @@ class ODriveUART:
     AXIS_STATE_CLOSED_LOOP_CONTROL = 8
     ERROR_DICT = {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("AXIS_ERROR_")}
 
-    def __init__(self, port, axis_num=0, dir=1):
-        self.bus = serial.Serial(
-            port=port,
-            # baudrate=115200,
-            baudrate=460800,
-            # baudrate=921600,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS,
-            timeout=1
-        )
+    SERIAL_PORT = '/dev/ttyAMA1'
+    _bus = serial.Serial(
+        port=SERIAL_PORT,
+        baudrate=460800,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        bytesize=serial.EIGHTBITS,
+        timeout=1
+    )
+
+    def __init__(self, axis_num=0, dir=1):
         self.axis_num = axis_num
         self.dir = dir
 
         # Clear the ASCII UART buffer
-        self.bus.reset_input_buffer()
-        self.bus.reset_output_buffer()
+        self._bus.reset_input_buffer()
+        self._bus.reset_output_buffer()
 
     def send_command(self, command: str):
-        self.bus.reset_input_buffer()
-        self.bus.write(f"{command}\n".encode())
+        self._bus.reset_input_buffer()
+        self._bus.write(f"{command}\n".encode())
         # Wait for the response if it's a read command
         if command.startswith('r') or command.startswith('f'):
             # Read until a newline character is encountered
-            response = self.bus.readline().decode('ascii').strip()
+            response = self._bus.readline().decode('ascii').strip()
             # If the response is empty, print a debug message
             if response == '':
                 print(f"No response received for command: {command}")
@@ -114,27 +114,36 @@ class ODriveUART:
         self.send_command(f'w axis{self.axis_num}.config.enable_watchdog 0')
 
 if __name__ == '__main__':
-    motor1 = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=-1)
-    motor2 = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=1)
-    motor1.start()
-    motor2.start()
+    import json
+    try:
+        with open('motor_dir.json', 'r') as f:
+            motor_dirs = json.load(f)
+            left_dir = motor_dirs['left']
+            right_dir = motor_dirs['right']
+    except Exception as e:
+        raise Exception("Error reading motor_dir.json")
+
+    right_motor = ODriveUART(axis_num=0, dir=right_dir)
+    left_motor = ODriveUART(axis_num=1, dir=left_dir)
+    right_motor.start()
+    left_motor.start()
 
     try:
-        motor1.set_speed_rpm(20)
+        right_motor.set_speed_rpm(20)
         time.sleep(3)
-        motor2.set_speed_rpm(20)
+        left_motor.set_speed_rpm(20)
         time.sleep(3)
 
         while True:
             # Check for errors and clear if necessary
-            for motor in [motor1, motor2]:
+            for motor in [right_motor, left_motor]:
                 if motor.check_errors():
-                    print(f"\nError detected on {'left' if motor == motor1 else 'right'} motor. Clearing...")
+                    print(f"\nError detected on {'right' if motor == right_motor else 'left'} motor. Clearing...")
                     motor.clear_errors()
                     time.sleep(1)
 
     except Exception as e:
         print(e)
     finally:
-        motor1.stop()
-        motor2.stop()
+        right_motor.stop()
+        left_motor.stop()

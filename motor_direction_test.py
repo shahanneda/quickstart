@@ -9,8 +9,8 @@ def test_motor_direction():
     imu = FilteredLSM6DS3()
     imu.calibrate()
     
-    left_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=1)
-    right_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=1)
+    right_motor = ODriveUART(axis_num=0, dir=1)
+    left_motor = ODriveUART(axis_num=1, dir=1)
     
     directions = {'left': 1, 'right': 1}
     

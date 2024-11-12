@@ -76,8 +76,8 @@ def balance():
     except Exception as e:
         raise Exception("Error reading motor_dir.json")
     
-    right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=left_dir)
-    left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=right_dir)
+    right_motor = ODriveUART(axis_num=0, dir=right_dir)
+    left_motor = ODriveUART(axis_num=1, dir=left_dir)
     left_motor.enable_torque_mode()
     right_motor.enable_torque_mode()
     left_motor.start()
@@ -91,8 +91,8 @@ def balance():
         reset_odrive()
         time.sleep(1)  # Give ODrive time to reset
         try:
-            right_motor = ODriveUART('/dev/ttyAMA1', axis_num=0, dir=left_dir)
-            left_motor = ODriveUART('/dev/ttyAMA1', axis_num=1, dir=right_dir)
+            right_motor = ODriveUART(axis_num=0, dir=left_dir)
+            left_motor = ODriveUART(axis_num=1, dir=right_dir)
             right_motor.clear_errors()
             left_motor.clear_errors()
             left_motor.enable_torque_mode()
