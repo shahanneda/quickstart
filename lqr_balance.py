@@ -3,23 +3,10 @@ import traceback
 import numpy as np
 import matplotlib.pyplot as plt
 from imu import FilteredLSM6DS3
-from odrive_uart import ODriveUART
+from odrive_uart import ODriveUART, reset_odrive
 from lqr import LQR_gains
 import os
 import json
-
-# This is l-gpio
-from RPi import GPIO  # Import GPIO module
-
-# GPIO setup for resetting ODrive
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(5, GPIO.OUT)
-
-def reset_odrive():
-    GPIO.output(5, GPIO.LOW)
-    time.sleep(0.1)
-    GPIO.output(5, GPIO.HIGH)
-    print("ODrive reset attempted")
 
 WHEEL_RADIUS = 6.5 * 0.0254 / 2  # 6.5 inches diameter converted to meters
 WHEEL_DIST = 0.235  # 23.5 cm from wheel to center
@@ -76,37 +63,35 @@ def balance():
     except Exception as e:
         raise Exception("Error reading motor_dir.json")
     
-    right_motor = ODriveUART(axis_num=0, dir=right_dir)
-    left_motor = ODriveUART(axis_num=1, dir=left_dir)
-    left_motor.enable_torque_mode()
-    right_motor.enable_torque_mode()
-    left_motor.start()
-    right_motor.start()
-    left_motor.set_speed_rpm(0)
-    right_motor.set_speed_rpm(0)
+    motor_controller = ODriveUART(port='/dev/ttyAMA1', left_axis=1, right_axis=0, dir_left=left_dir, dir_right=right_dir)
+    motor_controller.start_left()
+    motor_controller.enable_torque_mode_left()
+    motor_controller.start_right()
+    motor_controller.enable_torque_mode_right()
+    motor_controller.set_speed_rpm_left(0)
+    motor_controller.set_speed_rpm_right(0)
 
     # Function to reset ODrive and re-initialize motors
     def reset_and_initialize_motors():
-        nonlocal left_motor, right_motor
+        nonlocal motor_controller
         reset_odrive()
         time.sleep(1)  # Give ODrive time to reset
         try:
-            right_motor = ODriveUART(axis_num=0, dir=left_dir)
-            left_motor = ODriveUART(axis_num=1, dir=right_dir)
-            right_motor.clear_errors()
-            left_motor.clear_errors()
-            left_motor.enable_torque_mode()
-            right_motor.enable_torque_mode()
-            left_motor.start()
-            right_motor.start()
+            motor_controller = ODriveUART(port='/dev/ttyAMA1', left_axis=1, right_axis=0, dir_left=left_dir, dir_right=right_dir)
+            motor_controller.clear_errors_left()
+            motor_controller.clear_errors_right()
+            motor_controller.enable_torque_mode_left()
+            motor_controller.enable_torque_mode_right()
+            motor_controller.start_left()
+            motor_controller.start_right()
             print("Motors re-initialized successfully.")
         except Exception as e:
             print(f"Error re-initializing motors: {e}")
 
     # Record starting position
     try:
-        l_pos = left_motor.get_position_turns()
-        r_pos = right_motor.get_position_turns()
+        l_pos = motor_controller.get_position_turns_left()
+        r_pos = motor_controller.get_position_turns_right()
         start_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS
         start_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST)
     except Exception as e:
@@ -114,8 +99,8 @@ def balance():
         reset_and_initialize_motors()
         # Try again after reset
         try:
-            l_pos = left_motor.get_position_turns()
-            r_pos = right_motor.get_position_turns()
+            l_pos = motor_controller.get_position_turns_left()
+            r_pos = motor_controller.get_position_turns_right()
             start_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS
             start_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST)
         except Exception as e:
@@ -128,16 +113,16 @@ def balance():
     prev_vel = 0  # Initialize previous velocity for moving average
 
     try:
-        left_motor.enable_watchdog()
-        right_motor.enable_watchdog()
+        motor_controller.enable_watchdog_left()
+        motor_controller.enable_watchdog_right()
         while True:
             loop_start_time = time.time()
 
             # Check for ODriveUART errors every 10 cycles
             if cycle_count % 20 == 0:
                 try:
-                    left_error_code, left_error = left_motor.get_errors()
-                    right_error_code, right_error = right_motor.get_errors()
+                    left_error_code, left_error = motor_controller.get_errors_left()
+                    right_error_code, right_error = motor_controller.get_errors_right()
                     if left_error_code != 0 or right_error_code != 0:
                         print(f"Detected ODriveUART errors - Left: {left_error_code} ({left_error}), Right: {right_error_code} ({right_error})")
                         reset_and_initialize_motors()
@@ -149,14 +134,20 @@ def balance():
 
             cycle_count += 1
 
-            current_pitch = imu.robot_angle() 
+            pitch, roll, yaw = imu.get_orientation()
+            # current_pitch = imu.robot_angle() 
+            current_pitch = roll
+            # print(f"current_pitch: {current_pitch:.2f}")
             current_yaw_rate = -imu.gyro_RAW[2]
             current_pitch_rate = imu.gyro_RAW[0]
             try:
-                l_pos, l_vel = left_motor.get_pos_vel() 
-                r_pos, r_vel = right_motor.get_pos_vel() 
-                current_vel = (l_vel + r_vel) / 2 * RPM_TO_METERS_PER_SECOND
-                current_pos = (l_pos + r_pos) / 2 * MOTOR_TURNS_TO_LINEAR_POS - start_pos
+                r_vel = motor_controller.get_speed_rpm_right() * RPM_TO_METERS_PER_SECOND
+                l_vel = motor_controller.get_speed_rpm_left() * RPM_TO_METERS_PER_SECOND
+                l_pos = motor_controller.get_position_turns_left()
+                r_pos = motor_controller.get_position_turns_right()
+
+                current_vel = (l_vel + r_vel) / 2
+                current_pos = ((l_pos + r_pos) / 2) * MOTOR_TURNS_TO_LINEAR_POS - start_pos
                 current_yaw = (l_pos - r_pos) * MOTOR_TURNS_TO_LINEAR_POS / (2*WHEEL_DIST) - start_yaw
                              
             except Exception as e:
@@ -184,10 +175,11 @@ def balance():
             current_state = np.array([
                 current_pos, current_vel, current_pitch*np.pi/180, current_pitch_rate, current_yaw, current_yaw_rate
             ])
-            
+
             desired_state = np.array([0, 0, zero_angle*np.pi/180, 0, 0, 0])
 
             state_error = (current_state - desired_state).reshape((6,1))
+            # print(f"State error: {state_error}")
             C = -K @ state_error
             D = np.array([[0.5,0.5],[0.5,-0.5]])
             left_torque, right_torque = (D @ C).squeeze()
@@ -198,9 +190,9 @@ def balance():
 
             try:
                 # Apply torques
-                left_motor.set_torque_nm(left_torque)
-                right_motor.set_torque_nm(right_torque)
-                # pass
+                # print(f"left_torque: {left_torque:.2f}, right_torque: {right_torque:.2f}")
+                motor_controller.set_torque_nm_left(left_torque)
+                motor_controller.set_torque_nm_right(right_torque)
             except Exception as e:
                 print('Motor controller error:', e)
                 reset_and_initialize_motors()
@@ -222,10 +214,10 @@ def balance():
 
     finally:
         # Stop the motors after the loop
-        left_motor.disable_watchdog()
-        right_motor.disable_watchdog()
-        left_motor.stop()
-        right_motor.stop()
+        motor_controller.disable_watchdog_left()
+        motor_controller.disable_watchdog_right()
+        motor_controller.stop_left()
+        motor_controller.stop_right()
 
         # Create the plots
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(15, 12))

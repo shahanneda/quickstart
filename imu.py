@@ -37,6 +37,22 @@ class FilteredLSM6DS3():
         self.grav = self.quat_rotate(self.quat.conj(), [0, 0, 1])
         self.ahrs.quaternion = self.quat
 
+    def get_orientation(self):
+        self.update()
+        gx, gy, gz = self.grav
+        qw, qx, qy, qz = self.quat
+
+        # Calculate pitch (technically roll about x-axis)
+        pitch = np.degrees(np.arctan2(gz, np.sqrt(gx**2 + gy**2)))
+
+        # Calculate roll (about y-axis)
+        roll = np.degrees(np.arctan2(gy, gz))
+
+        # Calculate yaw (about z-axis)
+        yaw = np.degrees(np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy**2 + qz**2)))
+
+        return pitch, roll, yaw
+
     def robot_angle(self):
         self.update()
         # pitch = angle of robot, it's actually about x axis so technically roll

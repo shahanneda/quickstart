@@ -9,33 +9,47 @@ def test_motor_direction():
     imu = FilteredLSM6DS3()
     imu.calibrate()
     
-    right_motor = ODriveUART(axis_num=0, dir=1)
-    left_motor = ODriveUART(axis_num=1, dir=1)
+    motor_controller = ODriveUART(port='/dev/ttyAMA1', left_axis=1, right_axis=0, dir_left=1, dir_right=1)
     
     directions = {'left': 1, 'right': 1}
     
     # Test each motor
-    for motor, name in [(left_motor, 'left'), (right_motor, 'right')]:
+    for name in ['left', 'right']:
         print(f"\nTesting {name} motor...")
         
         # Start motor in closed loop control
-        motor.start()
-        motor.enable_velocity_mode()
+        if name == 'left':
+            motor_controller.start_left()
+            motor_controller.enable_velocity_mode_left()
+        else:
+            motor_controller.start_right()
+            motor_controller.enable_velocity_mode_right()
         
         # Get baseline gyro reading
         imu.update()
         baseline_gyro = imu.gyro_RAW[2]  # Z-axis rotation
+        print(f"Baseline gyro: {baseline_gyro}")
         
         # Spin motor
-        motor.set_speed_rpm(60)
-        time.sleep(0.5)
-        
+        if name == 'left':
+            motor_controller.set_speed_rpm_left(30)
+        else:
+            motor_controller.set_speed_rpm_right(30)
+
+        curr_time = time.time()
+        while time.time() - curr_time < 0.5:
+            time.sleep(0.01)
+            imu.update()
+
         # Get gyro reading during spin
-        imu.update()
-        spin_gyro = imu.gyro_RAW[0]
+        spin_gyro = imu.gyro_RAW[2]
+        print(f"Spin gyro: {spin_gyro}")
         
         # Stop motor
-        motor.stop()
+        if name == 'left':
+            motor_controller.stop_left()
+        else:
+            motor_controller.stop_right()
         
         # Determine direction based on gyro reading
         # Positive gyro means counterclockwise rotation when viewed from above
@@ -44,7 +58,10 @@ def test_motor_direction():
         
         # Set direction based on gyro reading
         # We want positive direction to be forward motion
-        directions[name] = -1 if gyro_diff > 0 else 1
+        if name == 'left':
+            directions['left'] = -1 if gyro_diff > 0 else 1
+        else:
+            directions['right'] = 1 if gyro_diff > 0 else -1
         
         time.sleep(0.5)  # Wait between tests
     
@@ -53,6 +70,7 @@ def test_motor_direction():
         json.dump(directions, f)
     
     print("\nDirection test complete!")
+    print(f"Left direction: {directions['left']}, Right direction: {directions['right']}")
     print(f"Results saved to motor_dir.json: {directions}")
 
 if __name__ == '__main__':
