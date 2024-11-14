@@ -6,11 +6,11 @@ from control import lqr
 def LQR_gains(Q_diag, R_diag):
     # ======= NEW PARAMS OCT 24, 2024 ======= #
     Jr = 0.018    # Moment of inertia of wheels [kg⋅m²]
-    Mr = 2.2-0.62 #removed battery      # Mass of wheel [kg] (BIG WHEEL)
+    Mr = 2.2      # Mass of wheel [kg] (BIG WHEEL)
     # Mr = 1.6      # Mass of wheel [kg] (SMALL WHEEL)
     Jpth = 1.46# OLD 2 BATTERY 1.88   # Moment of inertia of chassis pitch [kg⋅m²]
     Jpd = 0.041   # Moment of inertia of chassis yaw [kg⋅m²]
-    Mp = 4        # Mass of chassis [kg]
+    Mp = 4-0.62   # Mass of chassis [kg]
     R = 0.0846    # Radius of wheels [m]
     D = 0.46      # Distance between wheels [m]
     L = 0.367     # Distance to center of gravity [m]
