@@ -45,9 +45,9 @@ class KeyboardThread(Thread):
         self.pressed_key = key
 
         if key == 'w':
-            self.desired_vel = MAX_SPEED / 2
-        elif key == 's':
             self.desired_vel = -MAX_SPEED / 2
+        elif key == 's':
+            self.desired_vel = MAX_SPEED / 2
         elif key == 'a':
             self.desired_yaw_rate = -2.0  # ANGULAR_SPEED
         elif key == 'd':

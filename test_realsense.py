@@ -34,14 +34,21 @@ try:
     color_image = np.asanyarray(color_frame.get_data())
 
     # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.08), cv2.COLORMAP_JET)
+
+    # Adjust color image brightness (optional)
+    color_image_bright = cv2.convertScaleAbs(color_image, alpha=5.0, beta=0)
+    
+    # Rotate images 90 degrees clockwise
+    color_image_bright = cv2.rotate(color_image_bright, cv2.ROTATE_90_CLOCKWISE)
+    depth_colormap = cv2.rotate(depth_colormap, cv2.ROTATE_90_CLOCKWISE)
 
     # Get timestamp for unique filenames
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     # Save images
-    cv2.imwrite(f'color_image_{timestamp}.png', color_image)
-    cv2.imwrite(f'depth_image_{timestamp}.png', depth_colormap)
+    cv2.imwrite(f'images/color_image.png', color_image_bright)
+    cv2.imwrite(f'images/depth_image.png', depth_colormap)
     
     print(f"Images saved as color_image_{timestamp}.png and depth_image_{timestamp}.png")
 
